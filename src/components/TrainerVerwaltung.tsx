@@ -12,6 +12,7 @@ type Props = {
 const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
   const [showForm, setShowForm] = useState(false);
   const [editingTrainer, setEditingTrainer] = useState<Trainer | null>(null);
+  const [createAccount, setCreateAccount] = useState(false);
   const [formData, setFormData] = useState({
     name: "",
     nachname: "",
@@ -20,7 +21,7 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
     stundensatz: "",
     adresse: "",
     notiz: "",
-    password: "", // Nur für neue Trainer
+    password: "",
   });
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -38,6 +39,7 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
     });
     setEditingTrainer(null);
     setShowForm(false);
+    setCreateAccount(false);
     setError("");
   };
 
@@ -46,7 +48,7 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
     setFormData({
       name: t.name,
       nachname: t.nachname,
-      email: t.email,
+      email: t.email || "",
       telefon: t.telefon || "",
       stundensatz: t.stundensatz?.toString() || "",
       adresse: t.adresse || "",
@@ -67,7 +69,7 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
         await updateDoc(doc(db, "trainer", editingTrainer.id), {
           name: formData.name,
           nachname: formData.nachname,
-          email: formData.email,
+          email: formData.email || null,
           telefon: formData.telefon || null,
           stundensatz: formData.stundensatz ? parseFloat(formData.stundensatz) : null,
           adresse: formData.adresse || null,
@@ -75,39 +77,51 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
         });
       } else {
         // Neuen Trainer anlegen
-        if (!formData.password || formData.password.length < 6) {
-          setError("Passwort muss mindestens 6 Zeichen haben");
-          setLoading(false);
-          return;
+        let userId = null;
+
+        // Nur Account erstellen wenn Checkbox aktiviert
+        if (createAccount) {
+          if (!formData.email) {
+            setError("E-Mail ist erforderlich für Account-Erstellung");
+            setLoading(false);
+            return;
+          }
+          if (!formData.password || formData.password.length < 6) {
+            setError("Passwort muss mindestens 6 Zeichen haben");
+            setLoading(false);
+            return;
+          }
+
+          // Firebase Auth User erstellen
+          const userCredential = await createUserWithEmailAndPassword(
+            auth,
+            formData.email,
+            formData.password
+          );
+
+          userId = userCredential.user.uid;
+
+          // User-Dokument in Firestore erstellen
+          const { setDoc, doc: firestoreDoc } = await import("firebase/firestore");
+          await setDoc(firestoreDoc(db, "users", userCredential.user.uid), {
+            uid: userCredential.user.uid,
+            email: formData.email,
+            name: `${formData.name} ${formData.nachname}`,
+            rolle: "trainer",
+            createdAt: new Date().toISOString(),
+          });
         }
-
-        // Firebase Auth User erstellen
-        const userCredential = await createUserWithEmailAndPassword(
-          auth,
-          formData.email,
-          formData.password
-        );
-
-        // User-Dokument in Firestore erstellen
-        const { setDoc, doc: firestoreDoc } = await import("firebase/firestore");
-        await setDoc(firestoreDoc(db, "users", userCredential.user.uid), {
-          uid: userCredential.user.uid,
-          email: formData.email,
-          name: `${formData.name} ${formData.nachname}`,
-          rolle: "trainer",
-          createdAt: new Date().toISOString(),
-        });
 
         // Trainer-Dokument erstellen
         await addDoc(collection(db, "trainer"), {
           name: formData.name,
           nachname: formData.nachname,
-          email: formData.email,
+          email: formData.email || null,
           telefon: formData.telefon || null,
           stundensatz: formData.stundensatz ? parseFloat(formData.stundensatz) : null,
           adresse: formData.adresse || null,
           notiz: formData.notiz || null,
-          userId: userCredential.user.uid,
+          userId: userId,
           createdAt: new Date().toISOString(),
         });
       }
@@ -158,7 +172,7 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
             <div key={t.id} className="liste-item">
               <div className="item-info">
                 <strong>{t.name} {t.nachname}</strong>
-                <span>{t.email}</span>
+                {t.email && <span>{t.email}</span>}
                 {t.stundensatz && <span>{t.stundensatz} €/h</span>}
               </div>
               <div className="item-actions">
@@ -206,35 +220,19 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
                 </div>
               </div>
 
-              <div className="form-group">
-                <label>E-Mail *</label>
-                <input
-                  type="email"
-                  value={formData.email}
-                  onChange={(e) =>
-                    setFormData({ ...formData, email: e.target.value })
-                  }
-                  required
-                  disabled={!!editingTrainer}
-                />
-              </div>
-
-              {!editingTrainer && (
+              <div className="form-row">
                 <div className="form-group">
-                  <label>Passwort * (min. 6 Zeichen)</label>
+                  <label>Stundensatz (€) *</label>
                   <input
-                    type="password"
-                    value={formData.password}
+                    type="number"
+                    step="0.01"
+                    value={formData.stundensatz}
                     onChange={(e) =>
-                      setFormData({ ...formData, password: e.target.value })
+                      setFormData({ ...formData, stundensatz: e.target.value })
                     }
                     required
-                    minLength={6}
                   />
                 </div>
-              )}
-
-              <div className="form-row">
                 <div className="form-group">
                   <label>Telefon</label>
                   <input
@@ -242,17 +240,6 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
                     value={formData.telefon}
                     onChange={(e) =>
                       setFormData({ ...formData, telefon: e.target.value })
-                    }
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Stundensatz (€)</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.stundensatz}
-                    onChange={(e) =>
-                      setFormData({ ...formData, stundensatz: e.target.value })
                     }
                   />
                 </div>
@@ -279,6 +266,65 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
                   rows={3}
                 />
               </div>
+
+              {/* Account erstellen Checkbox - nur bei neuem Trainer */}
+              {!editingTrainer && (
+                <>
+                  <div className="form-group checkbox-group">
+                    <label className="checkbox-label">
+                      <input
+                        type="checkbox"
+                        checked={createAccount}
+                        onChange={(e) => setCreateAccount(e.target.checked)}
+                      />
+                      Account erstellen (Trainer kann sich einloggen)
+                    </label>
+                  </div>
+
+                  {createAccount && (
+                    <>
+                      <div className="form-group">
+                        <label>E-Mail *</label>
+                        <input
+                          type="email"
+                          value={formData.email}
+                          onChange={(e) =>
+                            setFormData({ ...formData, email: e.target.value })
+                          }
+                          required={createAccount}
+                        />
+                      </div>
+
+                      <div className="form-group">
+                        <label>Passwort * (min. 6 Zeichen)</label>
+                        <input
+                          type="password"
+                          value={formData.password}
+                          onChange={(e) =>
+                            setFormData({ ...formData, password: e.target.value })
+                          }
+                          required={createAccount}
+                          minLength={6}
+                        />
+                      </div>
+                    </>
+                  )}
+                </>
+              )}
+
+              {/* E-Mail Feld beim Bearbeiten */}
+              {editingTrainer && (
+                <div className="form-group">
+                  <label>E-Mail</label>
+                  <input
+                    type="email"
+                    value={formData.email}
+                    onChange={(e) =>
+                      setFormData({ ...formData, email: e.target.value })
+                    }
+                  />
+                </div>
+              )}
 
               <div className="form-actions">
                 <button type="button" onClick={resetForm}>
