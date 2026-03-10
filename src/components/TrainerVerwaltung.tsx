@@ -19,7 +19,6 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
     telefon: "",
     stundensatz: "",
     adresse: "",
-    iban: "",
     notiz: "",
     password: "", // Nur für neue Trainer
   });
@@ -34,7 +33,6 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
       telefon: "",
       stundensatz: "",
       adresse: "",
-      iban: "",
       notiz: "",
       password: "",
     });
@@ -52,7 +50,6 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
       telefon: t.telefon || "",
       stundensatz: t.stundensatz?.toString() || "",
       adresse: t.adresse || "",
-      iban: t.iban || "",
       notiz: t.notiz || "",
       password: "",
     });
@@ -74,7 +71,6 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
           telefon: formData.telefon || null,
           stundensatz: formData.stundensatz ? parseFloat(formData.stundensatz) : null,
           adresse: formData.adresse || null,
-          iban: formData.iban || null,
           notiz: formData.notiz || null,
         });
       } else {
@@ -110,7 +106,6 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
           telefon: formData.telefon || null,
           stundensatz: formData.stundensatz ? parseFloat(formData.stundensatz) : null,
           adresse: formData.adresse || null,
-          iban: formData.iban || null,
           notiz: formData.notiz || null,
           userId: userCredential.user.uid,
           createdAt: new Date().toISOString(),
@@ -270,17 +265,6 @@ const TrainerVerwaltung: React.FC<Props> = ({ trainer, onUpdate }) => {
                   value={formData.adresse}
                   onChange={(e) =>
                     setFormData({ ...formData, adresse: e.target.value })
-                  }
-                />
-              </div>
-
-              <div className="form-group">
-                <label>IBAN</label>
-                <input
-                  type="text"
-                  value={formData.iban}
-                  onChange={(e) =>
-                    setFormData({ ...formData, iban: e.target.value })
                   }
                 />
               </div>

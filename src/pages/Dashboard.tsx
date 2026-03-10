@@ -9,12 +9,17 @@ import TrainerVerwaltung from "../components/TrainerVerwaltung";
 import SpielerVerwaltung from "../components/SpielerVerwaltung";
 import TarifVerwaltung from "../components/TarifVerwaltung";
 import TrainingVerwaltung from "../components/TrainingVerwaltung";
+import TrainingKalender from "../components/TrainingKalender";
 
-type Tab = "trainings" | "spieler" | "trainer" | "tarife";
+type Tab = "trainings" | "verwaltung";
+type VerwaltungSubTab = "spieler" | "trainer" | "tarife";
+type TrainingAnsicht = "kalender" | "liste";
 
 const Dashboard: React.FC = () => {
   const { appUser, logout, isAdmin } = useAuth();
   const [activeTab, setActiveTab] = useState<Tab>("trainings");
+  const [verwaltungSubTab, setVerwaltungSubTab] = useState<VerwaltungSubTab>("spieler");
+  const [trainingAnsicht, setTrainingAnsicht] = useState<TrainingAnsicht>("kalender");
 
   // Daten-States
   const [trainer, setTrainer] = useState<Trainer[]>([]);
@@ -70,11 +75,19 @@ const Dashboard: React.FC = () => {
     loadData();
   }, []);
 
+  const handleTrainingClick = () => {
+    setTrainingAnsicht("liste");
+  };
+
   const tabs: { key: Tab; label: string; adminOnly?: boolean }[] = [
     { key: "trainings", label: "Trainings" },
+    { key: "verwaltung", label: "Verwaltung", adminOnly: true },
+  ];
+
+  const verwaltungTabs: { key: VerwaltungSubTab; label: string }[] = [
     { key: "spieler", label: "Spieler" },
-    { key: "trainer", label: "Trainer", adminOnly: true },
-    { key: "tarife", label: "Tarife", adminOnly: true },
+    { key: "trainer", label: "Trainer" },
+    { key: "tarife", label: "Tarife" },
   ];
 
   return (
@@ -113,28 +126,78 @@ const Dashboard: React.FC = () => {
           <div className="loading">Laden...</div>
         ) : (
           <>
+            {/* Trainings Tab */}
             {activeTab === "trainings" && (
-              <TrainingVerwaltung
-                trainings={trainings}
-                trainer={trainer}
-                spieler={spieler}
-                tarife={tarife}
-                onUpdate={loadData}
-                isAdmin={isAdmin}
-              />
+              <div className="verwaltung">
+                {/* Ansicht Toggle */}
+                <div className="ansicht-toggle">
+                  <button
+                    className={`ansicht-button ${trainingAnsicht === "kalender" ? "active" : ""}`}
+                    onClick={() => setTrainingAnsicht("kalender")}
+                  >
+                    Kalender
+                  </button>
+                  <button
+                    className={`ansicht-button ${trainingAnsicht === "liste" ? "active" : ""}`}
+                    onClick={() => setTrainingAnsicht("liste")}
+                  >
+                    Liste
+                  </button>
+                </div>
+
+                {trainingAnsicht === "kalender" ? (
+                  <TrainingKalender
+                    trainings={trainings}
+                    trainer={trainer}
+                    spieler={spieler}
+                    tarife={tarife}
+                    onTrainingClick={handleTrainingClick}
+                    isAdmin={isAdmin}
+                  />
+                ) : (
+                  <TrainingVerwaltung
+                    trainings={trainings}
+                    trainer={trainer}
+                    spieler={spieler}
+                    tarife={tarife}
+                    onUpdate={loadData}
+                    isAdmin={isAdmin}
+                  />
+                )}
+              </div>
             )}
-            {activeTab === "spieler" && (
-              <SpielerVerwaltung
-                spieler={spieler}
-                onUpdate={loadData}
-                isAdmin={isAdmin}
-              />
-            )}
-            {activeTab === "trainer" && isAdmin && (
-              <TrainerVerwaltung trainer={trainer} onUpdate={loadData} />
-            )}
-            {activeTab === "tarife" && isAdmin && (
-              <TarifVerwaltung tarife={tarife} onUpdate={loadData} />
+
+            {/* Verwaltung Tab (nur Admin) */}
+            {activeTab === "verwaltung" && isAdmin && (
+              <div className="verwaltung">
+                {/* Sub-Tabs */}
+                <div className="verwaltung-tabs">
+                  {verwaltungTabs.map((tab) => (
+                    <button
+                      key={tab.key}
+                      className={`verwaltung-tab ${verwaltungSubTab === tab.key ? "active" : ""}`}
+                      onClick={() => setVerwaltungSubTab(tab.key)}
+                    >
+                      {tab.label}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Sub-Tab Content */}
+                {verwaltungSubTab === "spieler" && (
+                  <SpielerVerwaltung
+                    spieler={spieler}
+                    onUpdate={loadData}
+                    isAdmin={isAdmin}
+                  />
+                )}
+                {verwaltungSubTab === "trainer" && (
+                  <TrainerVerwaltung trainer={trainer} onUpdate={loadData} />
+                )}
+                {verwaltungSubTab === "tarife" && (
+                  <TarifVerwaltung tarife={tarife} onUpdate={loadData} />
+                )}
+              </div>
             )}
           </>
         )}

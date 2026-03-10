@@ -19,7 +19,6 @@ export type Trainer = {
   stundensatz?: number;
   notiz?: string;
   adresse?: string;
-  iban?: string;
   telefon?: string;
   createdAt: string;
 };
