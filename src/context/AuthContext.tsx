@@ -7,7 +7,7 @@ import {
 } from "firebase/auth";
 import { doc, getDoc } from "firebase/firestore";
 import { auth, db } from "../firebase";
-import { AppUser, UserRole } from "../types";
+import { AppUser } from "../types";
 
 type AuthContextType = {
   currentUser: User | null;
