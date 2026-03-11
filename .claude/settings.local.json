@@ -1,0 +1,25 @@
+{
+  "permissions": {
+    "allow": [
+      "mcp__filesystem__directory_tree",
+      "mcp__filesystem__read_text_file",
+      "mcp__filesystem__list_directory",
+      "Bash(npm run build:*)",
+      "Bash(git add:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nFeature: Kalender, Abrechnung & Vertretung\n\n- Kalender: Tages- und Wochenansicht mit Trainer-Filter\n- Abrechnung: Monatliche Spieler- und Trainer-Abrechnung\n- Vertretung: Verwaltung von Trainer-Vertretungen\n- Admin sieht alles, Trainer nur eigene Abrechnung\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git push:*)",
+      "Bash(npx firebase deploy:*)",
+      "Bash(npx firebase:*)",
+      "Bash(git commit -m \"$\\(cat <<''EOF''\nUI Redesign: Kalender-Integration & modernes Design\n\n- Trainings-Tab entfernt, CRUD in Kalender integriert\n- Automatische Auswahl des aktuellen Tages\n- Modernes, schlichtes Design mit neutralen Farben\n- Verbesserte Animationen und Übergänge\n\nCo-Authored-By: Claude Opus 4.5 <noreply@anthropic.com>\nEOF\n\\)\")",
+      "Bash(git commit:*)",
+      "Bash(npm install:*)",
+      "Bash(npx tsc:*)",
+      "Bash(firebase functions:config:set:*)",
+      "Bash(firebase deploy:*)"
+    ]
+  },
+  "enableAllProjectMcpServers": true,
+  "enabledMcpjsonServers": [
+    "filesystem"
+  ]
+}
