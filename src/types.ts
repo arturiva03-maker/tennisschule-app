@@ -59,5 +59,31 @@ export type Training = {
   tarifId?: string;
   status: TrainingStatus;
   notiz?: string;
+  serieId?: string;
+  customPreisProStunde?: number;
+  customAbrechnung?: "proTraining" | "proSpieler";
   createdAt: string;
 };
+
+// Vertretung - wenn ein Trainer für einen anderen einspringt
+export type Vertretung = {
+  id: string;
+  trainingId: string;
+  vertretungTrainerId?: string; // Optional - wenn leer, dann "Vertretung offen"
+  createdAt: string;
+};
+
+// View-Modi für den Kalender
+export type ViewMode = "week" | "day";
+
+// Abrechnung Tab
+export type AbrechnungTab = "spieler" | "trainer";
+
+// Payments Map für Spieler-Abrechnung pro Monat
+export type PaymentsMap = Record<string, boolean>; // key: `${monat}__${spielerId}`
+
+// Trainer Payments Map pro Training
+export type TrainerPaymentsMap = Record<string, boolean>; // key: trainingId
+
+// Trainer Monats-Abrechnung Status
+export type TrainerMonthSettledMap = Record<string, boolean>; // key: `${monat}__${trainerId}`
