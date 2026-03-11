@@ -43,6 +43,8 @@ const Vertretung: React.FC<Props> = ({
   const [vertretungBis, setVertretungBis] = useState<string>("");
   const [expandedTrainer, setExpandedTrainer] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
+  // Zuordnung: trainingId -> ausgewählter Vertretungstrainer
+  const [selectedVertretungen, setSelectedVertretungen] = useState<Record<string, string>>({});
 
   const heute = todayISO();
 
@@ -124,9 +126,10 @@ const Vertretung: React.FC<Props> = ({
 
     try {
       for (const training of trainingsForSelection) {
+        const zugewiesenerTrainer = selectedVertretungen[training.id] || null;
         await addDoc(collection(db, "vertretungen"), {
           trainingId: training.id,
-          vertretungTrainerId: null,
+          vertretungTrainerId: zugewiesenerTrainer,
           createdAt: serverTimestamp(),
         });
       }
@@ -134,12 +137,21 @@ const Vertretung: React.FC<Props> = ({
       setVertretungDaten([]);
       setVertretungVon("");
       setVertretungBis("");
+      setSelectedVertretungen({});
       onUpdate();
     } catch (error) {
       console.error("Fehler beim Hinzufügen der Vertretungen:", error);
     }
 
     setSaving(false);
+  };
+
+  // Vertretungstrainer für ein Training in der Vorschau setzen
+  const setVertretungForTraining = (trainingId: string, trainerId: string) => {
+    setSelectedVertretungen((prev) => ({
+      ...prev,
+      [trainingId]: trainerId,
+    }));
   };
 
   // Vertretung löschen
@@ -409,20 +421,39 @@ const Vertretung: React.FC<Props> = ({
         {trainingsForSelection.length > 0 && (
           <div className="preview">
             <h4>Betroffene Trainings ({trainingsForSelection.length})</h4>
-            <ul>
-              {trainingsForSelection.slice(0, 5).map((t) => {
+            <div className="preview-trainings">
+              {trainingsForSelection.map((t) => {
                 const [y, m, d] = t.datum.split("-");
                 const germanDate = d && m && y ? `${d}.${m}.${y}` : t.datum;
+                const spielerNames = t.spielerIds
+                  .map((id) => getSpielerDisplayName(id))
+                  .join(", ");
+
                 return (
-                  <li key={t.id}>
-                    {germanDate} {t.uhrzeitVon}-{t.uhrzeitBis}
-                  </li>
+                  <div key={t.id} className="preview-training-item">
+                    <div className="preview-training-info">
+                      <span className="preview-date">{germanDate}</span>
+                      <span className="preview-time">{t.uhrzeitVon}-{t.uhrzeitBis}</span>
+                      <span className="preview-players" title={spielerNames}>{spielerNames}</span>
+                    </div>
+                    <select
+                      className={`trainer-select ${selectedVertretungen[t.id] ? "assigned" : "open"}`}
+                      value={selectedVertretungen[t.id] || ""}
+                      onChange={(e) => setVertretungForTraining(t.id, e.target.value)}
+                    >
+                      <option value="">-- Vertretung wählen --</option>
+                      {trainer
+                        .filter((tr) => tr.id !== vertretungTrainerId)
+                        .map((tr) => (
+                          <option key={tr.id} value={tr.id}>
+                            {tr.name} {tr.nachname || ""}
+                          </option>
+                        ))}
+                    </select>
+                  </div>
                 );
               })}
-              {trainingsForSelection.length > 5 && (
-                <li>... und {trainingsForSelection.length - 5} weitere</li>
-              )}
-            </ul>
+            </div>
           </div>
         )}
 
