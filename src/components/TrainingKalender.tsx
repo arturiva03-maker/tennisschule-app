@@ -1,5 +1,5 @@
 import React, { useState, useMemo, useCallback } from "react";
-import { collection, addDoc, updateDoc, deleteDoc, doc } from "firebase/firestore";
+import { collection, addDoc, updateDoc, deleteDoc, doc, writeBatch } from "firebase/firestore";
 import { db } from "../firebase";
 import { Training, Trainer, Spieler, Tarif, TrainingStatus, ViewMode, Vertretung } from "../types";
 
@@ -71,6 +71,10 @@ function toMinutes(hhmm: string): number {
   return h * 60 + m;
 }
 
+function generateId(): string {
+  return Math.random().toString(36).substring(2, 15) + Math.random().toString(36).substring(2, 15);
+}
+
 const TrainingKalender: React.FC<Props> = ({
   trainings,
   trainer,
@@ -99,8 +103,15 @@ const TrainingKalender: React.FC<Props> = ({
     tarifId: "",
     status: "geplant" as TrainingStatus,
     notiz: "",
+    wiederkehrend: false,
+    serieEnde: "",
   });
   const [saving, setSaving] = useState(false);
+
+  // Serie Edit Modal
+  const [showSerieModal, setShowSerieModal] = useState(false);
+  const [serieAction, setSerieAction] = useState<"edit" | "delete">("edit");
+  const [pendingTraining, setPendingTraining] = useState<Training | null>(null);
 
   // Maps
   const trainerById = useMemo(() => {
@@ -180,6 +191,8 @@ const TrainingKalender: React.FC<Props> = ({
       tarifId: "",
       status: "geplant",
       notiz: "",
+      wiederkehrend: false,
+      serieEnde: "",
     });
     setEditingTraining(null);
     setShowForm(false);
@@ -195,12 +208,25 @@ const TrainingKalender: React.FC<Props> = ({
       tarifId: "",
       status: "geplant",
       notiz: "",
+      wiederkehrend: false,
+      serieEnde: "",
     });
     setEditingTraining(null);
     setShowForm(true);
   };
 
   const openEditTraining = (t: Training) => {
+    // Wenn Training Teil einer Serie ist, fragen ob einzeln oder alle bearbeiten
+    if (t.serieId) {
+      setPendingTraining(t);
+      setSerieAction("edit");
+      setShowSerieModal(true);
+    } else {
+      startEditTraining(t, false);
+    }
+  };
+
+  const startEditTraining = (t: Training, editSerie: boolean) => {
     setFormData({
       trainerId: t.trainerId,
       datum: t.datum,
@@ -210,18 +236,20 @@ const TrainingKalender: React.FC<Props> = ({
       tarifId: t.tarifId || "",
       status: t.status,
       notiz: t.notiz || "",
+      wiederkehrend: editSerie,
+      serieEnde: t.serieEnde || "",
     });
     setEditingTraining(t);
     setShowForm(true);
+    setShowSerieModal(false);
   };
 
   const handleSubmit = async (e: React.FormEvent) => {
     e.preventDefault();
     setSaving(true);
     try {
-      const data = {
+      const baseData = {
         trainerId: formData.trainerId,
-        datum: formData.datum,
         uhrzeitVon: formData.uhrzeitVon,
         uhrzeitBis: formData.uhrzeitBis,
         spielerIds: formData.spielerIds,
@@ -229,10 +257,61 @@ const TrainingKalender: React.FC<Props> = ({
         status: formData.status,
         notiz: formData.notiz || null,
       };
+
       if (editingTraining) {
-        await updateDoc(doc(db, "trainings", editingTraining.id), data);
+        // Bearbeiten
+        if (formData.wiederkehrend && editingTraining.serieId) {
+          // Alle zukünftigen Trainings der Serie aktualisieren
+          const serieTrainings = trainings.filter(
+            (t) => t.serieId === editingTraining.serieId && t.datum >= editingTraining.datum
+          );
+          const batch = writeBatch(db);
+          for (const t of serieTrainings) {
+            batch.update(doc(db, "trainings", t.id), baseData);
+          }
+          await batch.commit();
+        } else {
+          // Nur dieses Training aktualisieren
+          await updateDoc(doc(db, "trainings", editingTraining.id), {
+            ...baseData,
+            datum: formData.datum,
+          });
+        }
       } else {
-        await addDoc(collection(db, "trainings"), { ...data, createdAt: new Date().toISOString() });
+        // Neues Training erstellen
+        if (formData.wiederkehrend && formData.serieEnde) {
+          // Wiederkehrende Trainings erstellen (wöchentlich)
+          const serieId = generateId();
+          const startDate = new Date(formData.datum + "T12:00:00");
+          const endDate = new Date(formData.serieEnde + "T12:00:00");
+
+          const dates: string[] = [];
+          let current = new Date(startDate);
+          while (current <= endDate) {
+            dates.push(`${current.getFullYear()}-${pad2(current.getMonth() + 1)}-${pad2(current.getDate())}`);
+            current.setDate(current.getDate() + 7);
+          }
+
+          const batch = writeBatch(db);
+          for (const datum of dates) {
+            const newDocRef = doc(collection(db, "trainings"));
+            batch.set(newDocRef, {
+              ...baseData,
+              datum,
+              serieId,
+              serieEnde: formData.serieEnde,
+              createdAt: new Date().toISOString(),
+            });
+          }
+          await batch.commit();
+        } else {
+          // Einzelnes Training erstellen
+          await addDoc(collection(db, "trainings"), {
+            ...baseData,
+            datum: formData.datum,
+            createdAt: new Date().toISOString(),
+          });
+        }
       }
       resetForm();
       onUpdate();
@@ -243,12 +322,48 @@ const TrainingKalender: React.FC<Props> = ({
   };
 
   const handleDelete = async (t: Training) => {
-    if (!window.confirm("Training wirklich löschen?")) return;
-    try {
-      await deleteDoc(doc(db, "trainings", t.id));
-      onUpdate();
-    } catch (err) {
-      console.error(err);
+    if (t.serieId) {
+      setPendingTraining(t);
+      setSerieAction("delete");
+      setShowSerieModal(true);
+    } else {
+      if (!window.confirm("Training wirklich löschen?")) return;
+      try {
+        await deleteDoc(doc(db, "trainings", t.id));
+        onUpdate();
+      } catch (err) {
+        console.error(err);
+      }
+    }
+  };
+
+  const confirmSerieAction = async (affectAll: boolean) => {
+    if (!pendingTraining) return;
+
+    if (serieAction === "edit") {
+      startEditTraining(pendingTraining, affectAll);
+    } else if (serieAction === "delete") {
+      try {
+        if (affectAll && pendingTraining.serieId) {
+          // Alle zukünftigen löschen
+          const serieTrainings = trainings.filter(
+            (t) => t.serieId === pendingTraining.serieId && t.datum >= pendingTraining.datum
+          );
+          const batch = writeBatch(db);
+          for (const t of serieTrainings) {
+            batch.delete(doc(db, "trainings", t.id));
+          }
+          await batch.commit();
+        } else {
+          // Nur dieses Training löschen
+          await deleteDoc(doc(db, "trainings", pendingTraining.id));
+        }
+        onUpdate();
+      } catch (err) {
+        console.error(err);
+      }
+      setShowSerieModal(false);
+      setPendingTraining(null);
     }
   };
 
@@ -408,13 +523,14 @@ const TrainingKalender: React.FC<Props> = ({
                 return (
                   <div
                     key={t.id}
-                    className={`event ${t.status}`}
+                    className={`event ${t.status} ${t.serieId ? "recurring" : ""}`}
                     style={{ top, height, background: config.bg, borderLeftColor: config.border }}
                     onClick={() => openEditTraining(t)}
                   >
                     <div className="event-time">{t.uhrzeitVon} - {t.uhrzeitBis}</div>
                     <div className="event-title">{t.spielerIds.map(id => getSpielerDisplayName(id)).join(", ") || "Keine Spieler"}</div>
                     {trainer.length > 1 && <div className="event-trainer">{getTrainerName(effectiveTrainerId)}</div>}
+                    {t.serieId && <span className="recurring-icon" title="Wiederkehrend">↻</span>}
                   </div>
                 );
               })}
@@ -443,7 +559,10 @@ const TrainingKalender: React.FC<Props> = ({
                   <div key={t.id} className="training-card" style={{ borderLeftColor: config.border }}>
                     <div className="training-card-header">
                       <span className="training-time">{t.uhrzeitVon} - {t.uhrzeitBis}</span>
-                      <span className="training-status" style={{ background: config.border }}>{config.label}</span>
+                      <div className="training-badges">
+                        {t.serieId && <span className="badge recurring" title="Wiederkehrend">↻</span>}
+                        <span className="training-status" style={{ background: config.border }}>{config.label}</span>
+                      </div>
                     </div>
                     <div className="training-card-body">
                       <div className="training-players">
@@ -487,6 +606,34 @@ const TrainingKalender: React.FC<Props> = ({
         </div>
       )}
 
+      {/* Serie Modal */}
+      {showSerieModal && pendingTraining && (
+        <div className="modal-overlay" onClick={() => { setShowSerieModal(false); setPendingTraining(null); }}>
+          <div className="modal modal-small" onClick={(e) => e.stopPropagation()}>
+            <div className="modal-header">
+              <h3>{serieAction === "edit" ? "Training bearbeiten" : "Training löschen"}</h3>
+              <button className="close-btn" onClick={() => { setShowSerieModal(false); setPendingTraining(null); }}>
+                <svg width="20" height="20" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
+                  <path d="M18 6L6 18M6 6l12 12"/>
+                </svg>
+              </button>
+            </div>
+            <div className="modal-body">
+              <p>Dieses Training ist Teil einer wiederkehrenden Serie.</p>
+              <p>{serieAction === "edit" ? "Möchtest du nur dieses oder alle zukünftigen Trainings bearbeiten?" : "Möchtest du nur dieses oder alle zukünftigen Trainings löschen?"}</p>
+            </div>
+            <div className="modal-footer serie-actions">
+              <button className="btn-secondary" onClick={() => confirmSerieAction(false)}>
+                Nur dieses
+              </button>
+              <button className="btn-primary" onClick={() => confirmSerieAction(true)}>
+                Alle zukünftigen
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
+
       {/* Training Form Modal */}
       {showForm && (
         <div className="modal-overlay" onClick={resetForm}>
@@ -512,7 +659,13 @@ const TrainingKalender: React.FC<Props> = ({
 
                 <div className="form-group">
                   <label>Datum</label>
-                  <input type="date" value={formData.datum} onChange={(e) => setFormData({...formData, datum: e.target.value})} required />
+                  <input
+                    type="date"
+                    value={formData.datum}
+                    onChange={(e) => setFormData({...formData, datum: e.target.value})}
+                    required
+                    disabled={!!(editingTraining && formData.wiederkehrend)}
+                  />
                 </div>
 
                 <div className="form-group">
@@ -529,7 +682,7 @@ const TrainingKalender: React.FC<Props> = ({
                   <label>Tarif</label>
                   <select value={formData.tarifId} onChange={(e) => setFormData({...formData, tarifId: e.target.value})}>
                     <option value="">Kein Tarif</option>
-                    {tarife.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.preisProStunde}€/h)</option>)}
+                    {tarife.map((t) => <option key={t.id} value={t.id}>{t.name} ({t.preisProStunde}€/h pro Spieler)</option>)}
                   </select>
                 </div>
 
@@ -554,6 +707,35 @@ const TrainingKalender: React.FC<Props> = ({
                   </select>
                 </div>
 
+                {/* Wiederkehrend Option - nur bei neuem Training */}
+                {!editingTraining && (
+                  <>
+                    <div className="form-group full">
+                      <label className="checkbox-item">
+                        <input
+                          type="checkbox"
+                          checked={formData.wiederkehrend}
+                          onChange={(e) => setFormData({...formData, wiederkehrend: e.target.checked})}
+                        />
+                        <span>Wiederkehrendes Training (wöchentlich)</span>
+                      </label>
+                    </div>
+
+                    {formData.wiederkehrend && (
+                      <div className="form-group full">
+                        <label>Serie endet am</label>
+                        <input
+                          type="date"
+                          value={formData.serieEnde}
+                          onChange={(e) => setFormData({...formData, serieEnde: e.target.value})}
+                          min={formData.datum}
+                          required={formData.wiederkehrend}
+                        />
+                      </div>
+                    )}
+                  </>
+                )}
+
                 <div className="form-group full">
                   <label>Notiz</label>
                   <textarea value={formData.notiz} onChange={(e) => setFormData({...formData, notiz: e.target.value})} rows={2} />
@@ -562,7 +744,9 @@ const TrainingKalender: React.FC<Props> = ({
 
               <div className="modal-footer">
                 <button type="button" className="btn-secondary" onClick={resetForm}>Abbrechen</button>
-                <button type="submit" className="btn-primary" disabled={saving}>{saving ? "Speichern..." : "Speichern"}</button>
+                <button type="submit" className="btn-primary" disabled={saving}>
+                  {saving ? "Speichern..." : (formData.wiederkehrend && !editingTraining ? "Serie erstellen" : "Speichern")}
+                </button>
               </div>
             </form>
           </div>

@@ -710,6 +710,15 @@ body {
   color: var(--text-secondary);
 }
 
+.event .recurring-icon {
+  position: absolute;
+  top: 2px;
+  right: 4px;
+  font-size: 0.75rem;
+  color: var(--accent);
+  opacity: 0.8;
+}
+
 /* Day Panel */
 .day-panel {
   padding: 1.5rem;
@@ -785,6 +794,17 @@ body {
   color: white;
   text-transform: uppercase;
   letter-spacing: 0.02em;
+}
+
+.training-badges {
+  display: flex;
+  align-items: center;
+  gap: 0.5rem;
+}
+
+.badge.recurring {
+  color: var(--accent);
+  font-size: 0.875rem;
 }
 
 .training-card-body {
@@ -885,6 +905,27 @@ body {
   max-height: 90vh;
   overflow-y: auto;
   animation: slideUp 0.25s ease;
+}
+
+.modal.modal-small {
+  max-width: 400px;
+}
+
+.modal-body {
+  padding: 1.5rem;
+}
+
+.modal-body p {
+  margin-bottom: 0.75rem;
+  color: var(--text-secondary);
+}
+
+.modal-body p:last-child {
+  margin-bottom: 0;
+}
+
+.modal-footer.serie-actions {
+  justify-content: space-between;
 }
 
 .modal-header {

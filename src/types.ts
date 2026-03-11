@@ -35,12 +35,11 @@ export type Spieler = {
   createdAt: string;
 };
 
-// Tarif
+// Tarif (Preis pro Stunde pro Spieler)
 export type Tarif = {
   id: string;
   name: string;
-  preisProStunde: number;
-  abrechnung: "proTraining" | "proSpieler" | "monatlich";
+  preisProStunde: number; // Preis pro Stunde pro Spieler
   beschreibung?: string;
   createdAt: string;
 };
@@ -59,9 +58,8 @@ export type Training = {
   tarifId?: string;
   status: TrainingStatus;
   notiz?: string;
-  serieId?: string;
-  customPreisProStunde?: number;
-  customAbrechnung?: "proTraining" | "proSpieler";
+  serieId?: string; // Für wiederkehrende Trainings
+  serieEnde?: string; // Ende-Datum der Serie (YYYY-MM-DD)
   createdAt: string;
 };
 

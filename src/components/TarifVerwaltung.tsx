@@ -14,7 +14,6 @@ const TarifVerwaltung: React.FC<Props> = ({ tarife, onUpdate }) => {
   const [formData, setFormData] = useState({
     name: "",
     preisProStunde: "",
-    abrechnung: "proTraining" as "proTraining" | "proSpieler" | "monatlich",
     beschreibung: "",
   });
   const [loading, setLoading] = useState(false);
@@ -23,7 +22,6 @@ const TarifVerwaltung: React.FC<Props> = ({ tarife, onUpdate }) => {
     setFormData({
       name: "",
       preisProStunde: "",
-      abrechnung: "proTraining",
       beschreibung: "",
     });
     setEditingTarif(null);
@@ -35,7 +33,6 @@ const TarifVerwaltung: React.FC<Props> = ({ tarife, onUpdate }) => {
     setFormData({
       name: t.name,
       preisProStunde: t.preisProStunde.toString(),
-      abrechnung: t.abrechnung,
       beschreibung: t.beschreibung || "",
     });
     setShowForm(true);
@@ -49,7 +46,6 @@ const TarifVerwaltung: React.FC<Props> = ({ tarife, onUpdate }) => {
       const tarifData = {
         name: formData.name,
         preisProStunde: parseFloat(formData.preisProStunde),
-        abrechnung: formData.abrechnung,
         beschreibung: formData.beschreibung || null,
       };
 
@@ -86,12 +82,6 @@ const TarifVerwaltung: React.FC<Props> = ({ tarife, onUpdate }) => {
     }
   };
 
-  const abrechnungLabels = {
-    proTraining: "Pro Training",
-    proSpieler: "Pro Spieler",
-    monatlich: "Monatlich",
-  };
-
   return (
     <div className="verwaltung">
       <div className="verwaltung-header">
@@ -110,8 +100,7 @@ const TarifVerwaltung: React.FC<Props> = ({ tarife, onUpdate }) => {
             <div key={t.id} className="liste-item">
               <div className="item-info">
                 <strong>{t.name}</strong>
-                <span>{t.preisProStunde} €/h</span>
-                <span className="badge">{abrechnungLabels[t.abrechnung]}</span>
+                <span>{t.preisProStunde} €/h pro Spieler</span>
                 {t.beschreibung && <span className="beschreibung">{t.beschreibung}</span>}
               </div>
               <div className="item-actions">
@@ -145,35 +134,18 @@ const TarifVerwaltung: React.FC<Props> = ({ tarife, onUpdate }) => {
                 />
               </div>
 
-              <div className="form-row">
-                <div className="form-group">
-                  <label>Preis pro Stunde (€) *</label>
-                  <input
-                    type="number"
-                    step="0.01"
-                    value={formData.preisProStunde}
-                    onChange={(e) =>
-                      setFormData({ ...formData, preisProStunde: e.target.value })
-                    }
-                    required
-                  />
-                </div>
-                <div className="form-group">
-                  <label>Abrechnung *</label>
-                  <select
-                    value={formData.abrechnung}
-                    onChange={(e) =>
-                      setFormData({
-                        ...formData,
-                        abrechnung: e.target.value as typeof formData.abrechnung,
-                      })
-                    }
-                  >
-                    <option value="proTraining">Pro Training</option>
-                    <option value="proSpieler">Pro Spieler</option>
-                    <option value="monatlich">Monatlich</option>
-                  </select>
-                </div>
+              <div className="form-group">
+                <label>Preis pro Stunde pro Spieler (€) *</label>
+                <input
+                  type="number"
+                  step="0.01"
+                  value={formData.preisProStunde}
+                  onChange={(e) =>
+                    setFormData({ ...formData, preisProStunde: e.target.value })
+                  }
+                  required
+                  placeholder="z.B. 30.00"
+                />
               </div>
 
               <div className="form-group">

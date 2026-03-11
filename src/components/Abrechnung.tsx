@@ -128,16 +128,20 @@ const Abrechnung: React.FC<Props> = ({
       .sort((a, b) => a.datum.localeCompare(b.datum) || a.uhrzeitVon.localeCompare(b.uhrzeitVon));
   }, [trainings, abrechnungMonat, abrechnungTrainerFilter, vertretungen, defaultTrainerId]);
 
-  // Preis für ein Training berechnen
+  // Preis für ein Training berechnen (Preis pro Stunde pro Spieler * Dauer * Anzahl Spieler)
   const trainingPreisGesamt = useCallback((t: Training): number => {
     const tarif = t.tarifId ? tarifById.get(t.tarifId) : undefined;
-    const preisProStunde = tarif?.preisProStunde ?? t.customPreisProStunde ?? 0;
-    const abrechnung = tarif?.abrechnung ?? t.customAbrechnung ?? "proTraining";
+    const preisProStunde = tarif?.preisProStunde ?? 0;
     const dauer = durationMin(t.uhrzeitVon, t.uhrzeitBis) / 60;
+    // Preis pro Stunde pro Spieler * Dauer * Anzahl Spieler
+    return round2(preisProStunde * dauer * t.spielerIds.length);
+  }, [tarifById]);
 
-    if (abrechnung === "proSpieler") {
-      return round2(preisProStunde * dauer * t.spielerIds.length);
-    }
+  // Preis pro Spieler für ein Training
+  const trainingPreisProSpieler = useCallback((t: Training): number => {
+    const tarif = t.tarifId ? tarifById.get(t.tarifId) : undefined;
+    const preisProStunde = tarif?.preisProStunde ?? 0;
+    const dauer = durationMin(t.uhrzeitVon, t.uhrzeitBis) / 60;
     return round2(preisProStunde * dauer);
   }, [tarifById]);
 
@@ -169,19 +173,8 @@ const Abrechnung: React.FC<Props> = ({
 
       let sum = 0;
       spielerTrainings.forEach((t) => {
-        const tarif = t.tarifId ? tarifById.get(t.tarifId) : undefined;
-        const preisProStunde = tarif?.preisProStunde ?? t.customPreisProStunde ?? 0;
-        const abrechnung = tarif?.abrechnung ?? t.customAbrechnung ?? "proTraining";
-        const dauer = durationMin(t.uhrzeitVon, t.uhrzeitBis) / 60;
-
-        if (abrechnung === "proSpieler") {
-          sum += round2(preisProStunde * dauer);
-        } else if (abrechnung === "proTraining") {
-          sum += round2((preisProStunde * dauer) / t.spielerIds.length);
-        } else if (abrechnung === "monatlich") {
-          // Bei monatlicher Abrechnung: Preis pro einzigartigem Wochentag
-          sum += round2(preisProStunde);
-        }
+        // Jeder Spieler zahlt: preisProStunde * Dauer
+        sum += trainingPreisProSpieler(t);
       });
 
       rows.push({
@@ -206,7 +199,7 @@ const Abrechnung: React.FC<Props> = ({
   }, [
     spieler,
     trainingsInMonth,
-    tarifById,
+    trainingPreisProSpieler,
     abrechnungSpielerSuche,
     spielerById,
   ]);
@@ -735,6 +728,7 @@ const Abrechnung: React.FC<Props> = ({
                     const [y, m, d] = t.datum.split("-");
                     const germanDate = d && m && y ? `${d}.${m}.${y}` : t.datum;
                     const tarif = t.tarifId ? tarifById.get(t.tarifId) : undefined;
+                    const preis = trainingPreisProSpieler(t);
 
                     return (
                       <li key={t.id}>
@@ -742,6 +736,7 @@ const Abrechnung: React.FC<Props> = ({
                           {germanDate} {t.uhrzeitVon} - {t.uhrzeitBis}
                         </strong>
                         {tarif && <span>Tarif: {tarif.name}</span>}
+                        <span>Betrag: {euro(preis)}</span>
                       </li>
                     );
                   })}
