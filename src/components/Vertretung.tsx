@@ -11,7 +11,6 @@ type Props = {
   onUpdate: () => void;
 };
 
-// Hilfsfunktionen
 function pad2(n: number): string {
   return String(n).padStart(2, "0");
 }
@@ -27,7 +26,7 @@ function addDaysISO(dateISO: string, days: number): string {
   return `${d.getFullYear()}-${pad2(d.getMonth() + 1)}-${pad2(d.getDate())}`;
 }
 
-const dayNames = ["Sonntag", "Montag", "Dienstag", "Mittwoch", "Donnerstag", "Freitag", "Samstag"];
+const dayNames = ["So", "Mo", "Di", "Mi", "Do", "Fr", "Sa"];
 
 const Vertretung: React.FC<Props> = ({
   trainings,
@@ -41,14 +40,12 @@ const Vertretung: React.FC<Props> = ({
   const [vertretungDaten, setVertretungDaten] = useState<string[]>([]);
   const [vertretungVon, setVertretungVon] = useState<string>("");
   const [vertretungBis, setVertretungBis] = useState<string>("");
-  const [expandedTrainer, setExpandedTrainer] = useState<string[]>([]);
   const [saving, setSaving] = useState(false);
-  // Zuordnung: trainingId -> ausgewählter Vertretungstrainer
   const [selectedVertretungen, setSelectedVertretungen] = useState<Record<string, string>>({});
 
   const heute = todayISO();
 
-  // Maps für schnellen Zugriff
+  // Maps
   const trainerById = useMemo(() => {
     const map = new Map<string, Trainer>();
     trainer.forEach((t) => map.set(t.id, t));
@@ -61,37 +58,35 @@ const Vertretung: React.FC<Props> = ({
     return map;
   }, [spieler]);
 
-  const defaultTrainerId = trainer[0]?.id || "";
-
-  // Spieler Name
   const getSpielerDisplayName = (id: string) => {
     const s = spielerById.get(id);
     return s ? `${s.vorname} ${s.nachname || ""}`.trim() : "Unbekannt";
   };
 
-  // Gruppiere Vertretungen nach fehlendem Trainer (nur zukünftige)
-  const groupedByTrainer = useMemo(() => {
+  // Alle zukünftigen Vertretungen mit Training-Daten
+  const alleVertretungen = useMemo(() => {
     const jetzt = new Date();
-    const groups: Record<string, { vertretung: VertretungType; training: Training }[]> = {};
+    return vertretungen
+      .map((v) => {
+        const training = trainings.find((t) => t.id === v.trainingId);
+        if (!training) return null;
+        if (training.status === "abgesagt") return null;
+        const trainingsEnde = new Date(`${training.datum}T${training.uhrzeitBis}:00`);
+        if (trainingsEnde <= jetzt) return null;
+        return { vertretung: v, training };
+      })
+      .filter((x): x is { vertretung: VertretungType; training: Training } => x !== null)
+      .sort((a, b) => {
+        const dateComp = a.training.datum.localeCompare(b.training.datum);
+        if (dateComp !== 0) return dateComp;
+        return a.training.uhrzeitVon.localeCompare(b.training.uhrzeitVon);
+      });
+  }, [vertretungen, trainings]);
 
-    vertretungen.forEach((v) => {
-      const training = trainings.find((t) => t.id === v.trainingId);
-      if (!training) return;
-      if (training.status === "abgesagt") return;
+  const offeneVertretungen = alleVertretungen.filter((x) => !x.vertretung.vertretungTrainerId);
+  const besetzteVertretungen = alleVertretungen.filter((x) => x.vertretung.vertretungTrainerId);
 
-      // Vergangene Trainings ausblenden
-      const trainingsEnde = new Date(`${training.datum}T${training.uhrzeitBis}:00`);
-      if (trainingsEnde <= jetzt) return;
-
-      const trainerId = training.trainerId || defaultTrainerId;
-      if (!groups[trainerId]) groups[trainerId] = [];
-      groups[trainerId].push({ vertretung: v, training });
-    });
-
-    return groups;
-  }, [vertretungen, trainings, defaultTrainerId]);
-
-  // Trainings des ausgewählten Trainers für die gewählten Daten
+  // Trainings für neue Vertretung
   const trainingsForSelection = useMemo(() => {
     if (!vertretungTrainerId) return [];
 
@@ -110,20 +105,16 @@ const Vertretung: React.FC<Props> = ({
       if (t.trainerId !== vertretungTrainerId) return false;
       if (t.status === "abgesagt") return false;
       if (!dates.includes(t.datum)) return false;
-      // Nur zukünftige
       const trainingsEnde = new Date(`${t.datum}T${t.uhrzeitBis}:00`);
       if (trainingsEnde <= new Date()) return false;
-      // Noch keine Vertretung eingetragen
       if (vertretungen.some((v) => v.trainingId === t.id)) return false;
       return true;
     });
   }, [vertretungTrainerId, vertretungModus, vertretungDaten, vertretungVon, vertretungBis, trainings, vertretungen]);
 
-  // Vertretung hinzufügen
   const addVertretungen = async () => {
     if (trainingsForSelection.length === 0) return;
     setSaving(true);
-
     try {
       for (const training of trainingsForSelection) {
         const zugewiesenerTrainer = selectedVertretungen[training.id] || null;
@@ -133,7 +124,6 @@ const Vertretung: React.FC<Props> = ({
           createdAt: serverTimestamp(),
         });
       }
-      // Reset
       setVertretungDaten([]);
       setVertretungVon("");
       setVertretungBis("");
@@ -142,29 +132,18 @@ const Vertretung: React.FC<Props> = ({
     } catch (error) {
       console.error("Fehler beim Hinzufügen der Vertretungen:", error);
     }
-
     setSaving(false);
   };
 
-  // Vertretungstrainer für ein Training in der Vorschau setzen
-  const setVertretungForTraining = (trainingId: string, trainerId: string) => {
-    setSelectedVertretungen((prev) => ({
-      ...prev,
-      [trainingId]: trainerId,
-    }));
-  };
-
-  // Vertretung löschen
   const deleteVertretung = async (vertretungId: string) => {
     try {
       await deleteDoc(doc(db, "vertretungen", vertretungId));
       onUpdate();
     } catch (error) {
-      console.error("Fehler beim Löschen der Vertretung:", error);
+      console.error("Fehler beim Löschen:", error);
     }
   };
 
-  // Vertretungstrainer zuweisen
   const assignVertretungTrainer = async (vertretungId: string, newTrainerId: string) => {
     try {
       await updateDoc(doc(db, "vertretungen", vertretungId), {
@@ -172,20 +151,19 @@ const Vertretung: React.FC<Props> = ({
       });
       onUpdate();
     } catch (error) {
-      console.error("Fehler beim Zuweisen des Vertretungstrainers:", error);
+      console.error("Fehler beim Zuweisen:", error);
     }
   };
 
-  // Toggle expanded
-  const toggleExpanded = (trainerId: string) => {
-    setExpandedTrainer((prev) =>
-      prev.includes(trainerId)
-        ? prev.filter((id) => id !== trainerId)
-        : [...prev, trainerId]
-    );
+  const setVertretungForTraining = (trainingId: string, trainerId: string) => {
+    setSelectedVertretungen((prev) => ({ ...prev, [trainingId]: trainerId }));
   };
 
-  const trainerEntries = Object.entries(groupedByTrainer);
+  const formatDate = (datum: string) => {
+    const [, m, d] = datum.split("-");
+    const date = new Date(datum + "T12:00:00");
+    return `${dayNames[date.getDay()]} ${d}.${m}.`;
+  };
 
   return (
     <div className="vertretung">
@@ -193,128 +171,105 @@ const Vertretung: React.FC<Props> = ({
         <h2>Vertretungen</h2>
       </div>
 
-      {/* Bestehende Vertretungen */}
-      <div className="vertretung-list">
-        {trainerEntries.length === 0 ? (
-          <div className="empty-state">
-            <div className="empty-icon">✓</div>
-            <p>Keine offenen Vertretungen</p>
+      {/* Übersicht - immer sichtbar */}
+      <div className="vertretung-overview">
+        {/* Offene Vertretungen */}
+        <div className="overview-section">
+          <div className="overview-header open">
+            <span className="overview-icon">⚠</span>
+            <span className="overview-title">Offen ({offeneVertretungen.length})</span>
           </div>
-        ) : (
-          trainerEntries
-            .sort(([, a], [, b]) => {
-              const dateA = a[0]?.training.datum || "";
-              const dateB = b[0]?.training.datum || "";
-              return dateA.localeCompare(dateB);
-            })
-            .map(([trainerId, items]) => {
-              const trainerName = trainerById.get(trainerId)?.name || "Unbekannt";
-              const isExpanded = expandedTrainer.includes(trainerId);
+          {offeneVertretungen.length === 0 ? (
+            <div className="overview-empty">Keine offenen Vertretungen</div>
+          ) : (
+            <div className="overview-list">
+              {offeneVertretungen.map(({ vertretung: v, training: t }) => {
+                const originalTrainer = trainerById.get(t.trainerId)?.name || "Unbekannt";
+                const spielerNames = t.spielerIds.map((id) => getSpielerDisplayName(id)).join(", ");
 
-              // Sortiere nach Datum und Zeit
-              const sortedItems = [...items].sort((a, b) => {
-                const dateComp = a.training.datum.localeCompare(b.training.datum);
-                if (dateComp !== 0) return dateComp;
-                return a.training.uhrzeitVon.localeCompare(b.training.uhrzeitVon);
-              });
-
-              // Gruppiere nach Datum
-              const groupedByDate: Record<string, typeof sortedItems> = {};
-              sortedItems.forEach((item) => {
-                const datum = item.training.datum;
-                if (!groupedByDate[datum]) groupedByDate[datum] = [];
-                groupedByDate[datum].push(item);
-              });
-
-              const uniqueDates = Object.keys(groupedByDate).length;
-              const openDates = Object.entries(groupedByDate).filter(([, dateItems]) =>
-                dateItems.some((item) => !item.vertretung.vertretungTrainerId)
-              ).length;
-
-              return (
-                <div key={trainerId} className="trainer-group">
-                  <div
-                    className={`trainer-header ${openDates > 0 ? "has-open" : "all-covered"}`}
-                    onClick={() => toggleExpanded(trainerId)}
-                  >
-                    <span className={`expand-icon ${isExpanded ? "expanded" : ""}`}>▼</span>
-                    <div className="trainer-info">
-                      <div className="trainer-name">{trainerName} fehlt</div>
-                      <div className="trainer-stats">
-                        {uniqueDates} Tag{uniqueDates !== 1 ? "e" : ""} betroffen
-                        {openDates > 0 ? ` • ${openDates} offen` : " • alle gedeckt ✓"}
-                      </div>
+                return (
+                  <div key={v.id} className="overview-item open">
+                    <div className="overview-item-main">
+                      <span className="overview-date">{formatDate(t.datum)}</span>
+                      <span className="overview-time">{t.uhrzeitVon}-{t.uhrzeitBis}</span>
+                      <span className="overview-original">({originalTrainer} fehlt)</span>
                     </div>
-                    <span className="toggle-hint">
-                      {isExpanded ? "Zuklappen" : "Aufklappen"}
-                    </span>
+                    <div className="overview-item-details">
+                      <span className="overview-players">{spielerNames}</span>
+                    </div>
+                    <div className="overview-item-actions">
+                      <select
+                        className="trainer-select open"
+                        value={v.vertretungTrainerId ?? ""}
+                        onChange={(e) => assignVertretungTrainer(v.id, e.target.value)}
+                      >
+                        <option value="">-- Vertretung wählen --</option>
+                        {trainer
+                          .filter((tr) => tr.id !== t.trainerId)
+                          .map((tr) => (
+                            <option key={tr.id} value={tr.id}>
+                              {tr.name} {tr.nachname || ""}
+                            </option>
+                          ))}
+                      </select>
+                      <button className="btn-icon delete" onClick={() => deleteVertretung(v.id)} title="Entfernen">×</button>
+                    </div>
                   </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
 
-                  {isExpanded && (
-                    <div className="trainer-content">
-                      {Object.entries(groupedByDate)
-                        .sort(([a], [b]) => a.localeCompare(b))
-                        .map(([datum, dateItems]) => {
-                          const d = new Date(datum + "T12:00:00");
-                          const formattedDate = `${dayNames[d.getDay()]}, ${pad2(d.getDate())}.${pad2(d.getMonth() + 1)}.${d.getFullYear()}`;
+        {/* Besetzte Vertretungen */}
+        <div className="overview-section">
+          <div className="overview-header assigned">
+            <span className="overview-icon">✓</span>
+            <span className="overview-title">Besetzt ({besetzteVertretungen.length})</span>
+          </div>
+          {besetzteVertretungen.length === 0 ? (
+            <div className="overview-empty">Keine besetzten Vertretungen</div>
+          ) : (
+            <div className="overview-list">
+              {besetzteVertretungen.map(({ vertretung: v, training: t }) => {
+                const originalTrainer = trainerById.get(t.trainerId)?.name || "Unbekannt";
+                const vertretungTrainer = trainerById.get(v.vertretungTrainerId!)?.name || "Unbekannt";
+                const spielerNames = t.spielerIds.map((id) => getSpielerDisplayName(id)).join(", ");
 
-                          return (
-                            <div key={datum} className="date-group">
-                              <div className="date-header">
-                                <span className="date-icon">📅</span>
-                                {formattedDate}
-                                <span className="date-count">
-                                  {dateItems.length} Training{dateItems.length !== 1 ? "s" : ""}
-                                </span>
-                              </div>
-
-                              <div className="date-trainings">
-                                {dateItems.map(({ vertretung: v, training: t }) => {
-                                  const spielerNames = t.spielerIds
-                                    .map((id) => getSpielerDisplayName(id))
-                                    .join(", ");
-                                  const isOffen = !v.vertretungTrainerId;
-
-                                  return (
-                                    <div key={v.id} className="vertretung-item">
-                                      <div className="time">{t.uhrzeitVon}–{t.uhrzeitBis}</div>
-                                      <div className="players" title={spielerNames}>
-                                        {spielerNames}
-                                      </div>
-                                      <select
-                                        className={`trainer-select ${isOffen ? "open" : "assigned"}`}
-                                        value={v.vertretungTrainerId ?? ""}
-                                        onChange={(e) => assignVertretungTrainer(v.id, e.target.value)}
-                                      >
-                                        <option value="">⚠ Offen</option>
-                                        {trainer
-                                          .filter((tr) => tr.id !== trainerId)
-                                          .map((tr) => (
-                                            <option key={tr.id} value={tr.id}>
-                                              ✓ {tr.name} {tr.nachname || ""}
-                                            </option>
-                                          ))}
-                                      </select>
-                                      <button
-                                        className="delete-btn"
-                                        onClick={() => deleteVertretung(v.id)}
-                                        title="Vertretung entfernen"
-                                      >
-                                        ×
-                                      </button>
-                                    </div>
-                                  );
-                                })}
-                              </div>
-                            </div>
-                          );
-                        })}
+                return (
+                  <div key={v.id} className="overview-item assigned">
+                    <div className="overview-item-main">
+                      <span className="overview-date">{formatDate(t.datum)}</span>
+                      <span className="overview-time">{t.uhrzeitVon}-{t.uhrzeitBis}</span>
+                      <span className="overview-trainer">{vertretungTrainer}</span>
+                      <span className="overview-original">für {originalTrainer}</span>
                     </div>
-                  )}
-                </div>
-              );
-            })
-        )}
+                    <div className="overview-item-details">
+                      <span className="overview-players">{spielerNames}</span>
+                    </div>
+                    <div className="overview-item-actions">
+                      <select
+                        className="trainer-select assigned"
+                        value={v.vertretungTrainerId ?? ""}
+                        onChange={(e) => assignVertretungTrainer(v.id, e.target.value)}
+                      >
+                        <option value="">-- Offen setzen --</option>
+                        {trainer
+                          .filter((tr) => tr.id !== t.trainerId)
+                          .map((tr) => (
+                            <option key={tr.id} value={tr.id}>
+                              {tr.name} {tr.nachname || ""}
+                            </option>
+                          ))}
+                      </select>
+                      <button className="btn-icon delete" onClick={() => deleteVertretung(v.id)} title="Entfernen">×</button>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+          )}
+        </div>
       </div>
 
       {/* Neue Vertretung planen */}
@@ -331,6 +286,7 @@ const Vertretung: React.FC<Props> = ({
                 setVertretungDaten([]);
                 setVertretungVon("");
                 setVertretungBis("");
+                setSelectedVertretungen({});
               }}
             >
               <option value="">-- wählen --</option>
@@ -347,12 +303,14 @@ const Vertretung: React.FC<Props> = ({
               <label>Modus</label>
               <div className="mode-toggle">
                 <button
+                  type="button"
                   className={vertretungModus === "einzeln" ? "active" : ""}
                   onClick={() => setVertretungModus("einzeln")}
                 >
                   Einzelne Tage
                 </button>
                 <button
+                  type="button"
                   className={vertretungModus === "zeitraum" ? "active" : ""}
                   onClick={() => setVertretungModus("zeitraum")}
                 >
@@ -385,8 +343,8 @@ const Vertretung: React.FC<Props> = ({
                   const date = new Date(d + "T12:00:00");
                   return (
                     <span key={d} className="date-chip">
-                      {dayNames[date.getDay()].slice(0, 2)} {pad2(date.getDate())}.{pad2(date.getMonth() + 1)}.
-                      <button onClick={() => setVertretungDaten(vertretungDaten.filter((x) => x !== d))}>×</button>
+                      {dayNames[date.getDay()]} {pad2(date.getDate())}.{pad2(date.getMonth() + 1)}.
+                      <button type="button" onClick={() => setVertretungDaten(vertretungDaten.filter((x) => x !== d))}>×</button>
                     </span>
                   );
                 })}
@@ -423,16 +381,12 @@ const Vertretung: React.FC<Props> = ({
             <h4>Betroffene Trainings ({trainingsForSelection.length})</h4>
             <div className="preview-trainings">
               {trainingsForSelection.map((t) => {
-                const [y, m, d] = t.datum.split("-");
-                const germanDate = d && m && y ? `${d}.${m}.${y}` : t.datum;
-                const spielerNames = t.spielerIds
-                  .map((id) => getSpielerDisplayName(id))
-                  .join(", ");
+                const spielerNames = t.spielerIds.map((id) => getSpielerDisplayName(id)).join(", ");
 
                 return (
                   <div key={t.id} className="preview-training-item">
                     <div className="preview-training-info">
-                      <span className="preview-date">{germanDate}</span>
+                      <span className="preview-date">{formatDate(t.datum)}</span>
                       <span className="preview-time">{t.uhrzeitVon}-{t.uhrzeitBis}</span>
                       <span className="preview-players" title={spielerNames}>{spielerNames}</span>
                     </div>
@@ -459,7 +413,8 @@ const Vertretung: React.FC<Props> = ({
 
         <div className="form-actions">
           <button
-            className="add-btn"
+            type="button"
+            className="btn-primary"
             disabled={trainingsForSelection.length === 0 || saving}
             onClick={addVertretungen}
           >

@@ -539,13 +539,24 @@ const TrainingKalender: React.FC<Props> = ({
                 const config = statusConfig[t.status];
                 const vertretung = vertretungen.find((v) => v.trainingId === t.id);
                 const effectiveTrainerId = vertretung?.vertretungTrainerId || t.trainerId || defaultTrainerId;
+                const hasVertretung = !!vertretung;
+                const vertretungOffen = hasVertretung && !vertretung.vertretungTrainerId;
+                const vertretungBesetzt = hasVertretung && !!vertretung.vertretungTrainerId;
+
+                const cardClasses = [
+                  "training-card",
+                  vertretungOffen ? "vertretung-open" : "",
+                  vertretungBesetzt ? "vertretung-assigned" : "",
+                ].filter(Boolean).join(" ");
 
                 return (
-                  <div key={t.id} className="training-card" style={{ borderLeftColor: config.border }}>
+                  <div key={t.id} className={cardClasses} style={{ borderLeftColor: config.border }}>
                     <div className="training-card-header">
                       <span className="training-time">{t.uhrzeitVon} - {t.uhrzeitBis}</span>
                       <div className="training-badges">
                         {t.serieId && <span className="badge recurring" title="Wiederkehrend">↻</span>}
+                        {vertretungOffen && <span className="badge vertretung-offen" title="Vertretung offen">⚠</span>}
+                        {vertretungBesetzt && <span className="badge vertretung-besetzt" title="Vertretung">✓V</span>}
                         <span className="training-status" style={{ background: config.border }}>{config.label}</span>
                       </div>
                     </div>
@@ -555,6 +566,7 @@ const TrainingKalender: React.FC<Props> = ({
                       </div>
                       <div className="training-meta">
                         <span>{getTrainerName(effectiveTrainerId)}</span>
+                        {vertretungBesetzt && <span className="vertretung-hint">(Vertretung)</span>}
                         {t.tarifId && <span>{tarifById.get(t.tarifId)?.name}</span>}
                       </div>
                       {t.notiz && <div className="training-note">{t.notiz}</div>}
